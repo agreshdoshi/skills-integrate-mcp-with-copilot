@@ -1,3 +1,13 @@
+:root {
+  --school-lime: #a3e635;
+  --school-lime-dark: #84cc16;
+  --school-ivory: #f8fafc;
+  --school-ink: #1f2937;
+  --school-muted: #4b5563;
+  --school-border: #dfe7d5;
+  --school-card: #ffffff;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -8,20 +18,21 @@
 body {
   font-family: Arial, sans-serif;
   line-height: 1.6;
-  color: #333;
+  color: var(--school-ink);
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
-  background-color: #f5f5f5;
+  background-color: #f3f7ed;
 }
 
 header {
   text-align: center;
   padding: 20px 0;
   margin-bottom: 30px;
-  background-color: #1a237e;
-  color: white;
+  background: linear-gradient(135deg, var(--school-lime) 0%, #bef264 100%);
+  color: var(--school-ink);
   border-radius: 5px;
+  border: 2px solid #bbf7d0;
 }
 
 header h1 {
@@ -42,32 +53,33 @@ main {
 }
 
 section {
-  background-color: white;
+  background-color: var(--school-card);
   padding: 20px;
   border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 5px rgba(31, 41, 55, 0.08);
   width: 100%;
   max-width: 500px;
+  border: 1px solid var(--school-border);
 }
 
 section h3 {
   margin-bottom: 20px;
   padding-bottom: 10px;
-  border-bottom: 1px solid #ddd;
-  color: #1a237e;
+  border-bottom: 1px solid var(--school-border);
+  color: #3f6212;
 }
 
 .activity-card {
   margin-bottom: 15px;
   padding: 15px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--school-border);
   border-radius: 5px;
-  background-color: #f9f9f9;
+  background-color: var(--school-ivory);
 }
 
 .activity-card h4 {
   margin-bottom: 10px;
-  color: #0066cc;
+  color: #3f6212;
 }
 
 .activity-card p {
@@ -83,7 +95,7 @@ section h3 {
 
 .participants-section h5 {
   margin-bottom: 8px;
-  color: #1a237e;
+  color: #3f6212;
   font-size: 16px;
 }
 
@@ -150,18 +162,19 @@ section h3 {
 }
 
 button {
-  background-color: #1a237e;
-  color: white;
+  background-color: var(--school-lime);
+  color: var(--school-ink);
   border: none;
   padding: 10px 15px;
   font-size: 16px;
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.2s;
+  font-weight: 600;
 }
 
 button:hover {
-  background-color: #3949ab;
+  background-color: var(--school-lime-dark);
 }
 
 .message {
