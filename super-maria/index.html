@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#79d8f2">
+  <title>Super Maria — Cloudtop Adventure</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 18px; background: linear-gradient(145deg, #f8d987, #f4a8b8 55%, #a9d8ff); color: #233451; }
+    .game { width: min(100%, 980px); }
+    .top { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin: 0 2px 10px; }
+    h1 { margin: 0; font-size: clamp(1.35rem, 4vw, 2rem); letter-spacing: -.04em; }
+    .tag { margin: 3px 0 0; font-size: .9rem; opacity: .8; }
+    .sound { border: 0; border-radius: 999px; padding: 9px 13px; font: inherit; font-weight: 700; color: #fff; background: #394e80; cursor: pointer; }
+    .frame { overflow: hidden; border: 5px solid white; border-radius: 18px; box-shadow: 0 18px 45px #623c5a45; background: #87dcf5; }
+    canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+    .help { display: flex; justify-content: space-between; gap: 12px; margin: 10px 3px 0; font-size: .88rem; }
+    .help strong { color: #263d75; }
+    .touch { display: none; justify-content: space-between; margin-top: 12px; gap: 12px; touch-action: none; }
+    .touch-group { display: flex; gap: 10px; }
+    .touch button { width: 62px; height: 56px; border: 0; border-radius: 16px; background: #ffffffd9; color: #304477; box-shadow: 0 5px 0 #53648a55; font-size: 1.4rem; font-weight: 800; touch-action: none; }
+    .touch button:active { transform: translateY(3px); box-shadow: 0 2px 0 #53648a55; }
+    @media (pointer: coarse), (max-width: 700px) { .touch { display: flex; } .help { font-size: .78rem; } }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <header class="top">
+      <div><h1>🌼 Super Maria</h1><p class="tag">Cloudtop Adventure</p></div>
+      <button class="sound" id="restart" type="button">↻ Restart</button>
+    </header>
+    <div class="frame"><canvas id="game" width="960" height="540" aria-label="Super Maria platform game"></canvas></div>
+    <div class="help"><span><strong>Move:</strong> ← → / A D &nbsp; <strong>Jump:</strong> ↑ / W / Space</span><span>Grab flowers · dodge the grumpy clouds!</span></div>
+    <div class="touch" aria-label="Touch controls">
+      <div class="touch-group"><button data-key="ArrowLeft" aria-label="Move left">←</button><button data-key="ArrowRight" aria-label="Move right">→</button></div>
+      <button data-key="Space" aria-label="Jump">↑</button>
+    </div>
+  </main>
+<script>
+(() => {
+  const canvas = document.querySelector('#game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height, WORLD = 2750;
+  const keys = new Set();
+  let player, camera, flowers, enemy, state, score, lives, lastTime = 0;
+  const platforms = [
+    {x:0,y:470,w:630,h:100},{x:710,y:470,w:460,h:100},{x:1260,y:470,w:500,h:100},
+    {x:1840,y:470,w:910,h:100},{x:260,y:385,w:130,h:18},{x:470,y:320,w:135,h:18},
+    {x:790,y:385,w:140,h:18},{x:1000,y:320,w:130,h:18},{x:1370,y:385,w:145,h:18},
+    {x:1580,y:320,w:140,h:18},{x:1940,y:385,w:140,h:18},{x:2160,y:320,w:145,h:18}
+  ];
+  const flowerSpots = [[300,345],[520,280],[830,345],[1040,280],[1415,345],[1630,280],[1980,345],[2210,280],[1130,425],[1740,425],[2390,425]];
+  function reset() {
+    player = {x:60,y:390,w:30,h:42,vx:0,vy:0,ground:false,face:1,invuln:0};
+    camera = 0; flowers = flowerSpots.map(([x,y]) => ({x,y,taken:false}));
+    enemy = {x:570,y:432,w:36,h:38,vx:1.35,min:510,max:610};
+    state = 'playing'; score = 0; lives = 3;
+  }
+  reset();
+  const down = e => { if (['ArrowLeft','ArrowRight','ArrowUp',' '].includes(e.key)) e.preventDefault(); keys.add(e.key === ' ' ? 'Space' : e.key); };
+  const up = e => keys.delete(e.key === ' ' ? 'Space' : e.key);
+  window.addEventListener('keydown', down); window.addEventListener('keyup', up);
+  window.addEventListener('blur', () => keys.clear());
+  document.querySelector('#restart').addEventListener('click', reset);
+  document.querySelectorAll('.touch button').forEach(button => {
+    const k = button.dataset.key;
+    button.addEventListener('pointerdown', e => { e.preventDefault(); keys.add(k); button.setPointerCapture(e.pointerId); });
+    const release = () => keys.delete(k);
+    button.addEventListener('pointerup', release); button.addEventListener('pointercancel', release); button.addEventListener('lostpointercapture', release);
+  });
+  function overlap(a,b) { return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+  function update(dt) {
+    if (state !== 'playing') { if (keys.has('Enter')) reset(); return; }
+    const left = keys.has('ArrowLeft') || keys.has('a') || keys.has('A');
+    const right = keys.has('ArrowRight') || keys.has('d') || keys.has('D');
+    const jump = keys.has('ArrowUp') || keys.has('w') || keys.has('W') || keys.has('Space');
+    player.vx = (right ? 3.5 : 0) - (left ? 3.5 : 0);
+    if (player.vx) player.face = Math.sign(player.vx);
+    if (jump && player.ground) { player.vy = -11.5; player.ground = false; }
+    player.vy = Math.min(player.vy + .52 * dt, 12);
+    player.x += player.vx * dt;
+    player.x = Math.max(0, Math.min(WORLD-player.w, player.x));
+    for (const p of platforms) if (overlap(player,p)) {
+      if (player.vx > 0) player.x = p.x-player.w;
+      if (player.vx < 0) player.x = p.x+p.w;
+    }
+    const oldY = player.y; player.y += player.vy * dt; player.ground = false;
+    for (const p of platforms) if (overlap(player,p)) {
+      if (player.vy >= 0 && oldY+player.h <= p.y+8) { player.y=p.y-player.h; player.vy=0; player.ground=true; }
+      else if (player.vy < 0 && oldY >= p.y+p.h-4) { player.y=p.y+p.h; player.vy=0; }
+    }
+    if (player.y > H+80) hurt();
+    enemy.x += enemy.vx*dt;
+    if(enemy.x < enemy.min || enemy.x+enemy.w > enemy.max) enemy.vx *= -1;
+    if (player.invuln > 0) player.invuln -= dt;
+    for(const f of flowers) if(!f.taken && overlap(player,{x:f.x-12,y:f.y-15,w:24,h:30})) { f.taken=true; score++; }
+    if(player.invuln <= 0 && overlap(player,enemy)) hurt();
+    if(player.x > 2670) state='won';
+    camera = Math.max(0, Math.min(WORLD-W, player.x-W*.36));
+  }
+  function hurt() {
+    lives--; if(lives<=0) { state='lost'; return; }
+    player.x=60; player.y=390; player.vx=player.vy=0; player.invuln=100;
+  }
+  function cloud(x,y,s=1) {
+    ctx.fillStyle='#ffffffb8'; ctx.beginPath(); ctx.arc(x,y,22*s,0,Math.PI*2); ctx.arc(x+23*s,y-9*s,29*s,0,Math.PI*2); ctx.arc(x+52*s,y,21*s,0,Math.PI*2); ctx.fill();
+  }
+  function draw() {
+    const sky=ctx.createLinearGradient(0,0,0,H); sky.addColorStop(0,'#72d5f4'); sky.addColorStop(1,'#e7f8ff'); ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+    for(let i=0;i<8;i++){let x=((i*190-camera*.22)%(W+150)+W+150)%(W+150)-50; cloud(x,75+(i%3)*62,.75+(i%2)*.2);}
+    ctx.save(); ctx.translate(-camera,0);
+    // Distant rolling hills
+    ctx.fillStyle='#9bd990'; ctx.beginPath(); ctx.moveTo(camera,470); for(let x=camera;x<camera+W+60;x+=60) ctx.quadraticCurveTo(x+30,420,x+60,470); ctx.lineTo(camera+W,540);ctx.lineTo(camera,540);ctx.fill();
+    for(const p of platforms){ctx.fillStyle='#8c5a3b';ctx.fillRect(p.x,p.y,p.w,p.h);ctx.fillStyle='#70c768';ctx.fillRect(p.x,p.y,p.w,10);ctx.fillStyle='#a5e27b';for(let x=p.x+12;x<p.x+p.w;x+=34)ctx.fillRect(x,p.y+13,12,4);}
+    // Finish flag
+    ctx.fillStyle='#59477f';ctx.fillRect(2705,330,7,140);ctx.fillStyle='#ff668b';ctx.beginPath();ctx.moveTo(2712,334);ctx.lineTo(2760,350);ctx.lineTo(2712,369);ctx.fill();ctx.fillStyle='#ffe36f';ctx.beginPath();ctx.arc(2708,328,9,0,Math.PI*2);ctx.fill();
+    for(const f of flowers) if(!f.taken){ctx.fillStyle='#ffcf4a';ctx.beginPath();for(let i=0;i<8;i++){let a=i*Math.PI/4;ctx.ellipse(f.x+Math.cos(a)*8,f.y+Math.sin(a)*8,5,8,a,0,Math.PI*2);}ctx.fill();ctx.fillStyle='#fff4a8';ctx.beginPath();ctx.arc(f.x,f.y,5,0,Math.PI*2);ctx.fill();}
+    // Puffed grumpy cloud creature
+    ctx.fillStyle='#756fbb';ctx.beginPath();ctx.arc(enemy.x+12,enemy.y+22,16,0,7);ctx.arc(enemy.x+25,enemy.y+15,19,0,7);ctx.arc(enemy.x+34,enemy.y+25,14,0,7);ctx.fill();
+    ctx.fillStyle='white';ctx.fillRect(enemy.x+13,enemy.y+19,6,8);ctx.fillRect(enemy.x+26,enemy.y+19,6,8);ctx.fillStyle='#34395f';ctx.fillRect(enemy.x+16,enemy.y+22,3,4);ctx.fillRect(enemy.x+28,enemy.y+22,3,4);ctx.fillStyle='#5e527e';ctx.fillRect(enemy.x+12,enemy.y+9,9,3);ctx.fillRect(enemy.x+25,enemy.y+9,9,3);
+    // Maria: bright cap, overalls, boots
+    if(player.invuln<=0 || Math.floor(player.invuln/7)%2===0){
+      ctx.save(); if(player.face<0){ctx.translate(player.x*2+player.w,0);ctx.scale(-1,1);ctx.translate(-player.x,0);}
+      ctx.fillStyle='#563a45';ctx.fillRect(player.x+4,player.y+31,10,11);ctx.fillRect(player.x+19,player.y+31,9,11);
+      ctx.fillStyle='#e65d72';ctx.fillRect(player.x+5,player.y+17,21,17);ctx.fillStyle='#4b78bc';ctx.fillRect(player.x+7,player.y+27,18,12);ctx.fillStyle='#ffdb68';ctx.fillRect(player.x+11,player.y+28,3,3);ctx.fillRect(player.x+19,player.y+28,3,3);
+      ctx.fillStyle='#f6bd91';ctx.fillRect(player.x+8,player.y+5,19,16);ctx.fillStyle='#382e48';ctx.fillRect(player.x+7,player.y+2,20,6);ctx.fillRect(player.x+4,player.y+6,25,4);ctx.fillStyle='#fff4e9';ctx.fillRect(player.x+17,player.y+11,3,3);ctx.fillStyle='#513a46';ctx.fillRect(player.x+22,player.y+17,6,3);
+      ctx.restore();
+    }
+    ctx.restore();
+    // HUD
+    ctx.fillStyle='#fff';ctx.fillRect(18,16,222,48);ctx.fillStyle='#32466f';ctx.font='bold 20px system-ui';ctx.fillText('🌼 '+score+' / '+flowerSpots.length,30,47);ctx.fillText('♥ '.repeat(lives),158,47);
+    if(state!=='playing'){
+      ctx.fillStyle='#263451b8';ctx.fillRect(0,0,W,H);ctx.fillStyle='white';ctx.textAlign='center';ctx.font='bold 48px system-ui';ctx.fillText(state==='won'?'You made it! ✨':'Whoops! 💫',W/2,H/2-18);ctx.font='22px system-ui';ctx.fillText(state==='won'?`Flowers collected: ${score} · Press Enter to play again`:'Press Enter to try again',W/2,H/2+27);ctx.textAlign='left';
+    }
+  }
+  function loop(now){const dt=Math.min((now-lastTime)/16.67||1,2);lastTime=now;update(dt);draw();requestAnimationFrame(loop);}
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
